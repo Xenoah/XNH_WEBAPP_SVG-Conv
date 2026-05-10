@@ -133,6 +133,71 @@
   transform: scale(1.1);
 }
 
+/* ヘルプダイアログ */
+.help {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elev);
+  color: var(--fg);
+  padding: 0;
+  max-width: 520px;
+  width: min(92vw, 520px);
+  box-shadow: var(--shadow-md);
+}
+
+.help::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.help__inner {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.help__title {
+  font-size: 15px;
+}
+
+.help__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.help__list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.help kbd {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+}
+
+.help__note {
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.help menu {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .field__label {
   font-size: 12px;
   color: var(--fg-muted);
