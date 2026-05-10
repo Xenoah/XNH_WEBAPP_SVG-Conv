@@ -7,7 +7,7 @@ import { initPreview, getViewports } from './ui/preview.js';
 import { initSplitter } from './ui/splitter.js';
 import { initControls } from './ui/controls.js';
 import { initToolbar, applyTheme } from './ui/toolbar.js';
-import { describe, optimize } from './engine/optimizeSvg.js';
+import { describe, optimize, copyToClipboard, toSvgz } from './engine/optimizeSvg.js';
 
 const els = {
   toolbar: document.getElementById('toolbar'),
@@ -42,6 +42,8 @@ const els = {
   preprocessGroup: document.getElementById('preprocess-group'),
   traceGroup: document.getElementById('trace-group'),
   presetGroup: document.getElementById('preset-group'),
+  paletteGroup: document.getElementById('palette-group'),
+  paletteSection: document.getElementById('palette-section'),
 };
 
 let traceWorker = null;
@@ -72,9 +74,11 @@ function onWorkerMessage(event) {
     case 'done': {
       const optimized = optimize(msg.svg, { precision: 2 });
       const meta = describe(optimized);
+      const palette = extractPalette(optimized);
       store.update({
         svg: optimized,
         svgMeta: meta,
+        palette,
         ui: { busy: false, progress: 1, statusKey: 'status.done' },
       });
       break;
@@ -120,16 +124,63 @@ async function convert() {
 function downloadSvg() {
   const { svg, source } = store.state;
   if (!svg) return;
-  const baseName = (source?.name ?? 'image').replace(/\.[^.]+$/, '') || 'image';
-  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const baseName = baseFileName(source);
+  saveBlob(new Blob([svg], { type: 'image/svg+xml' }), `${baseName}.svg`);
+}
+
+async function downloadSvgz() {
+  const { svg, source } = store.state;
+  if (!svg) return;
+  const blob = await toSvgz(svg);
+  if (!blob) {
+    console.warn('[main] CompressionStream not supported; falling back to .svg');
+    downloadSvg();
+    return;
+  }
+  const baseName = baseFileName(source);
+  saveBlob(blob, `${baseName}.svgz`);
+}
+
+async function copySvg() {
+  const { svg } = store.state;
+  if (!svg) return;
+  const ok = await copyToClipboard(svg);
+  if (ok) {
+    store.update({ ui: { statusKey: 'status.copied' } });
+    setTimeout(() => {
+      if (store.state.ui.statusKey === 'status.copied') {
+        store.update({ ui: { statusKey: 'status.idle' } });
+      }
+    }, 1800);
+  }
+}
+
+function baseFileName(source) {
+  return (source?.name ?? 'image').replace(/\.[^.]+$/, '') || 'image';
+}
+
+function saveBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${baseName}.svg`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function extractPalette(svg) {
+  const set = new Map();
+  const re = /fill="(#[0-9a-fA-F]{3,8})"/g;
+  let m;
+  while ((m = re.exec(svg)) !== null) {
+    if (m[1].toLowerCase() === '#none') continue;
+    set.set(m[1].toLowerCase(), (set.get(m[1].toLowerCase()) ?? 0) + 1);
+  }
+  return [...set.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([hex]) => hex);
 }
 
 function bindViewportButtons() {
@@ -193,6 +244,8 @@ async function bootstrap() {
     preprocessGroup: els.preprocessGroup,
     traceGroup: els.traceGroup,
     presetGroup: els.presetGroup,
+    paletteGroup: els.paletteGroup,
+    paletteSection: els.paletteSection,
   });
   initToolbar({
     toolbarEl: els.toolbar,
@@ -200,6 +253,8 @@ async function bootstrap() {
     localeSelectEl: els.localeSelect,
     onConvert: convert,
     onDownload: downloadSvg,
+    onDownloadSvgz: downloadSvgz,
+    onCopy: copySvg,
     onLocaleChange: async (loc) => {
       store.update({ ui: { locale: loc } });
       await loadLocale(loc);
@@ -208,11 +263,32 @@ async function bootstrap() {
   });
   bindStatus();
 
+  bindShortcuts();
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker
       .register('./sw.js')
       .catch((err) => console.warn('[sw] register failed', err));
   }
+}
+
+function bindShortcuts() {
+  window.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod) return;
+    const key = e.key.toLowerCase();
+    if (key === 'z' && !e.shiftKey) {
+      if (store.undo()) e.preventDefault();
+    } else if ((key === 'z' && e.shiftKey) || key === 'y') {
+      if (store.redo()) e.preventDefault();
+    } else if (key === 'enter') {
+      e.preventDefault();
+      convert();
+    } else if (key === 's') {
+      e.preventDefault();
+      downloadSvg();
+    }
+  });
 }
 
 bootstrap().catch((err) => {

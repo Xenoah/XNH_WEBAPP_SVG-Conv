@@ -53,7 +53,27 @@
           data-i18n="toolbar.download"
           disabled
         >
-          ダウンロード
+          SVG
+        </button>
+        <button
+          type="button"
+          class="btn"
+          data-action="download-svgz"
+          data-i18n="toolbar.downloadGz"
+          title="gzip 圧縮した SVGZ をダウンロード"
+          disabled
+        >
+          SVGZ
+        </button>
+        <button
+          type="button"
+          class="btn"
+          data-action="copy"
+          data-i18n="toolbar.copy"
+          title="SVG コードをクリップボードへコピー"
+          disabled
+        >
+          コピー
         </button>
         <span class="spacer"></span>
         <button
@@ -64,6 +84,15 @@
           title="テーマ切替"
         >
           ◐
+        </button>
+        <button
+          type="button"
+          class="btn btn--icon"
+          data-action="show-help"
+          data-i18n-title="toolbar.help"
+          title="ヘルプ"
+        >
+          ?
         </button>
         <select class="select" id="locale-select" aria-label="Language">
           <option value="ja">日本語</option>
@@ -96,6 +125,11 @@
         <section class="panel__section">
           <h2 class="panel__title" data-i18n="panel.preset">プリセット</h2>
           <div class="control-group" id="preset-group"></div>
+        </section>
+
+        <section class="panel__section" id="palette-section" hidden>
+          <h2 class="panel__title" data-i18n="panel.palette">パレット</h2>
+          <div class="palette" id="palette-group"></div>
         </section>
       </aside>
 
@@ -170,6 +204,26 @@
     </footer>
 
     <input type="file" id="file-input" accept="image/*" hidden multiple />
+
+    <dialog class="help" id="help-dialog">
+      <form method="dialog" class="help__inner">
+        <h2 class="help__title" data-i18n="help.title">ヘルプ</h2>
+        <ul class="help__list">
+          <li><kbd>Ctrl</kbd>+<kbd>Enter</kbd> <span data-i18n="help.convert">変換実行</span></li>
+          <li><kbd>Ctrl</kbd>+<kbd>S</kbd> <span data-i18n="help.save">SVG ダウンロード</span></li>
+          <li><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Y</kbd> <span data-i18n="help.undo">Undo / Redo</span></li>
+          <li><kbd>Ctrl</kbd>+<kbd>V</kbd> <span data-i18n="help.paste">クリップボードから貼付</span></li>
+          <li><kbd>+</kbd> / <kbd>-</kbd> / <kbd>0</kbd> <span data-i18n="help.zoom">ズーム / フィット（プレビュー）</span></li>
+          <li><span data-i18n="help.dblclick">プレビューダブルクリックでフィット、分割バーダブルクリックで 50:50</span></li>
+        </ul>
+        <p class="help__note" data-i18n="help.note">
+          すべての処理はブラウザ内で完結します。
+        </p>
+        <menu>
+          <button type="submit" class="btn" data-i18n="help.close">閉じる</button>
+        </menu>
+      </form>
+    </dialog>
 
     <script type="module" src="./js/main.js"></script>
   </body>

@@ -6,9 +6,13 @@ import { loadFile } from './dropZone.js';
 /** @param {{ toolbarEl: HTMLElement, fileInputEl: HTMLInputElement,
  *           localeSelectEl: HTMLSelectElement,
  *           onConvert: () => void, onDownload: () => void,
+ *           onDownloadSvgz: () => void, onCopy: () => void,
  *           onLocaleChange: (loc: string) => void }} opts */
 export function initToolbar(opts) {
-  const { toolbarEl, fileInputEl, localeSelectEl, onConvert, onDownload, onLocaleChange } = opts;
+  const {
+    toolbarEl, fileInputEl, localeSelectEl,
+    onConvert, onDownload, onDownloadSvgz, onCopy, onLocaleChange,
+  } = opts;
 
   toolbarEl.addEventListener('click', async (e) => {
     const target = e.target;
@@ -29,8 +33,17 @@ export function initToolbar(opts) {
       case 'download':
         onDownload();
         break;
+      case 'download-svgz':
+        onDownloadSvgz();
+        break;
+      case 'copy':
+        onCopy();
+        break;
       case 'toggle-theme':
         toggleTheme();
+        break;
+      case 'show-help':
+        showHelp();
         break;
     }
   });
@@ -41,10 +54,17 @@ export function initToolbar(opts) {
   });
 
   store.subscribe((state) => {
-    const convertBtn = toolbarEl.querySelector('[data-action="convert"]');
-    const downloadBtn = toolbarEl.querySelector('[data-action="download"]');
-    if (convertBtn) convertBtn.toggleAttribute('disabled', !state.source || state.ui.busy);
-    if (downloadBtn) downloadBtn.toggleAttribute('disabled', !state.svg);
+    const has = !!state.svg;
+    const map = {
+      'convert': !state.source || state.ui.busy,
+      'download': !has,
+      'download-svgz': !has,
+      'copy': !has,
+    };
+    for (const [action, disabled] of Object.entries(map)) {
+      const btn = toolbarEl.querySelector(`[data-action="${action}"]`);
+      if (btn) btn.toggleAttribute('disabled', disabled);
+    }
   });
 }
 
@@ -73,6 +93,11 @@ function toggleTheme() {
   const root = document.documentElement;
   const isDark = root.classList.toggle('theme-dark');
   store.update({ ui: { theme: isDark ? 'dark' : 'light' } });
+}
+
+function showHelp() {
+  const dlg = document.getElementById('help-dialog');
+  if (dlg && typeof dlg.showModal === 'function') dlg.showModal();
 }
 
 export function applyTheme(theme) {

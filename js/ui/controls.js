@@ -27,27 +27,53 @@ const PRESETS = [
   {
     id: 'logo',
     label: 'Logo',
-    apply: { mode: 'outline', trace: { simplify: 1, smoothing: 0.8, speckle: 8 } },
+    apply: {
+      mode: 'outline',
+      preprocess: { autoThreshold: true, blur: 0 },
+      trace: { simplify: 1, smoothing: 0.8, speckle: 8, strokeWidth: 0 },
+    },
   },
   {
     id: 'sketch',
     label: 'Sketch',
-    apply: { mode: 'edges', trace: { simplify: 0.5, smoothing: 0.5, speckle: 2 } },
+    apply: {
+      mode: 'edges',
+      preprocess: { autoThreshold: false, threshold: 96, blur: 0.5 },
+      trace: { simplify: 0.5, smoothing: 0.5, speckle: 2, strokeWidth: 1.2 },
+    },
   },
   {
     id: 'photo',
     label: 'Photo',
-    apply: { mode: 'color', trace: { colors: 12, simplify: 1.2, smoothing: 0.6 } },
+    apply: {
+      mode: 'color',
+      preprocess: { blur: 0.5 },
+      trace: { colors: 12, simplify: 1.2, smoothing: 0.6, speckle: 4 },
+    },
   },
   {
     id: 'icon',
     label: 'Icon',
-    apply: { mode: 'binary', trace: { simplify: 0.3, smoothing: 1, speckle: 16 } },
+    apply: {
+      mode: 'binary',
+      preprocess: { autoThreshold: true, blur: 0 },
+      trace: { simplify: 0.3, smoothing: 1, speckle: 16, strokeWidth: 0 },
+    },
+  },
+  {
+    id: 'manga',
+    label: 'Manga',
+    apply: {
+      mode: 'binary',
+      preprocess: { autoThreshold: false, threshold: 160, contrast: 30, blur: 0 },
+      trace: { simplify: 0.6, smoothing: 0.4, speckle: 6, strokeWidth: 0 },
+    },
   },
 ];
 
 /** @param {{ modeGroup: HTMLElement, preprocessGroup: HTMLElement,
- *           traceGroup: HTMLElement, presetGroup: HTMLElement }} opts */
+ *           traceGroup: HTMLElement, presetGroup: HTMLElement,
+ *           paletteGroup: HTMLElement, paletteSection: HTMLElement }} opts */
 export function initControls(opts) {
   renderModes(opts.modeGroup);
   renderFields(opts.preprocessGroup, 'preprocess', PREPROCESS_FIELDS);
@@ -56,7 +82,31 @@ export function initControls(opts) {
 
   store.subscribe(() => {
     refreshAll(opts);
+    refreshPalette(opts);
   });
+}
+
+function refreshPalette({ paletteGroup, paletteSection }) {
+  if (!paletteGroup || !paletteSection) return;
+  const { palette, mode } = store.state;
+  if (!palette || !palette.length || mode !== 'color') {
+    paletteSection.hidden = true;
+    return;
+  }
+  paletteSection.hidden = false;
+  paletteGroup.innerHTML = '';
+  for (const hex of palette) {
+    const sw = document.createElement('span');
+    sw.className = 'palette__swatch';
+    sw.style.background = hex;
+    sw.title = hex;
+    sw.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard?.writeText(hex);
+      } catch {}
+    });
+    paletteGroup.appendChild(sw);
+  }
 }
 
 function renderModes(container) {

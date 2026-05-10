@@ -9,6 +9,7 @@ const DEFAULT_STATE = Object.freeze({
   // 出力
   svg: null, // string
   svgMeta: null, // { bytes, nodes }
+  palette: null, // 直近のカラートレースで使ったパレット（[r,g,b][]）
   // モード
   mode: 'outline', // 'outline' | 'centerline' | 'edges' | 'color' | 'binary' | 'silhouette'
   // 前処理
@@ -42,6 +43,11 @@ const DEFAULT_STATE = Object.freeze({
 class Store extends EventTarget {
   /** @type {typeof DEFAULT_STATE} */
   state;
+  /** @type {Array<{ mode, preprocess, trace }>} */
+  #undoStack = [];
+  /** @type {Array<{ mode, preprocess, trace }>} */
+  #redoStack = [];
+  #snapshotTimer = 0;
 
   constructor() {
     super();
@@ -56,6 +62,7 @@ class Store extends EventTarget {
    */
   update(patch) {
     let changed = false;
+    let userParamsTouched = false;
     for (const [k, v] of Object.entries(patch)) {
       const prev = this.state[k];
       if (v !== null && typeof v === 'object' && !Array.isArray(v) && prev && typeof prev === 'object') {
@@ -63,17 +70,70 @@ class Store extends EventTarget {
         if (!shallowEqual(prev, next)) {
           this.state = { ...this.state, [k]: next };
           changed = true;
+          if (k === 'preprocess' || k === 'trace') userParamsTouched = true;
         }
       } else if (prev !== v) {
         this.state = { ...this.state, [k]: v };
         changed = true;
+        if (k === 'mode') userParamsTouched = true;
       }
     }
     if (changed) {
+      if (userParamsTouched) this.#scheduleSnapshot();
       this.#persist();
       this.dispatchEvent(new CustomEvent('change', { detail: this.state }));
     }
   }
+
+  #scheduleSnapshot() {
+    // 連続変更（スライダドラッグなど）は 350ms 区切りで 1 つにまとめる
+    if (this.#snapshotTimer) return;
+    this.#snapshotTimer = setTimeout(() => {
+      this.#snapshotTimer = 0;
+      this.#pushUndo();
+    }, 350);
+  }
+
+  #pushUndo() {
+    const { mode, preprocess, trace } = this.state;
+    const snap = { mode, preprocess: { ...preprocess }, trace: { ...trace } };
+    const top = this.#undoStack[this.#undoStack.length - 1];
+    if (top && shallowSnapEqual(top, snap)) return;
+    this.#undoStack.push(snap);
+    if (this.#undoStack.length > 100) this.#undoStack.shift();
+    this.#redoStack.length = 0;
+  }
+
+  undo() {
+    if (this.#undoStack.length < 2) return false;
+    const cur = this.#undoStack.pop();
+    this.#redoStack.push(cur);
+    const target = this.#undoStack[this.#undoStack.length - 1];
+    this.#applySnapshot(target);
+    return true;
+  }
+
+  redo() {
+    const target = this.#redoStack.pop();
+    if (!target) return false;
+    this.#undoStack.push(target);
+    this.#applySnapshot(target);
+    return true;
+  }
+
+  #applySnapshot(snap) {
+    this.state = {
+      ...this.state,
+      mode: snap.mode,
+      preprocess: { ...snap.preprocess },
+      trace: { ...snap.trace },
+    };
+    this.#persist();
+    this.dispatchEvent(new CustomEvent('change', { detail: this.state }));
+  }
+
+  canUndo() { return this.#undoStack.length > 1; }
+  canRedo() { return this.#redoStack.length > 0; }
 
   /** Subscribe to state changes. Returns unsubscribe fn. */
   subscribe(handler) {
@@ -125,6 +185,14 @@ function shallowEqual(a, b) {
   if (ka.length !== kb.length) return false;
   for (const k of ka) if (a[k] !== b[k]) return false;
   return true;
+}
+
+function shallowSnapEqual(a, b) {
+  return (
+    a.mode === b.mode &&
+    shallowEqual(a.preprocess, b.preprocess) &&
+    shallowEqual(a.trace, b.trace)
+  );
 }
 
 export const store = new Store();
