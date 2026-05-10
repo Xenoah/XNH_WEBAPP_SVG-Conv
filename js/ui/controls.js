@@ -6,20 +6,21 @@ import { t } from '../i18n/index.js';
 const MODES = ['outline', 'centerline', 'edges', 'color', 'binary', 'silhouette'];
 
 const PREPROCESS_FIELDS = [
-  { key: 'brightness', min: -100, max: 100, step: 1 },
-  { key: 'contrast', min: -100, max: 100, step: 1 },
-  { key: 'gamma', min: 0.2, max: 3.0, step: 0.05 },
-  { key: 'blur', min: 0, max: 5, step: 0.1 },
-  { key: 'threshold', min: 0, max: 255, step: 1 },
+  { key: 'brightness', kind: 'range', min: -100, max: 100, step: 1 },
+  { key: 'contrast', kind: 'range', min: -100, max: 100, step: 1 },
+  { key: 'gamma', kind: 'range', min: 0.2, max: 3.0, step: 0.05 },
+  { key: 'blur', kind: 'range', min: 0, max: 5, step: 0.1 },
+  { key: 'autoThreshold', kind: 'toggle' },
+  { key: 'threshold', kind: 'range', min: 0, max: 255, step: 1, disabledBy: 'autoThreshold' },
 ];
 
 const TRACE_FIELDS = [
-  { key: 'simplify', min: 0, max: 5, step: 0.1 },
-  { key: 'smoothing', min: 0, max: 1, step: 0.05 },
-  { key: 'speckle', min: 0, max: 32, step: 1 },
-  { key: 'cornerThreshold', min: 0, max: 180, step: 1 },
-  { key: 'colors', min: 2, max: 32, step: 1 },
-  { key: 'strokeWidth', min: 0, max: 10, step: 0.1 },
+  { key: 'simplify', kind: 'range', min: 0, max: 5, step: 0.1 },
+  { key: 'smoothing', kind: 'range', min: 0, max: 1, step: 0.05 },
+  { key: 'speckle', kind: 'range', min: 0, max: 32, step: 1 },
+  { key: 'cornerThreshold', kind: 'range', min: 0, max: 180, step: 1 },
+  { key: 'colors', kind: 'range', min: 2, max: 32, step: 1 },
+  { key: 'strokeWidth', kind: 'range', min: 0, max: 10, step: 0.1 },
 ];
 
 const PRESETS = [
@@ -78,35 +79,67 @@ function renderModes(container) {
 function renderFields(container, section, fields) {
   container.innerHTML = '';
   for (const f of fields) {
-    const wrapper = document.createElement('label');
-    wrapper.className = 'field';
-    wrapper.dataset.section = section;
-    wrapper.dataset.key = f.key;
-
-    const labelEl = document.createElement('span');
-    labelEl.className = 'field__label';
-    labelEl.setAttribute('data-i18n', `field.${f.key}`);
-    labelEl.textContent = t(`field.${f.key}`);
-
-    const valueEl = document.createElement('span');
-    valueEl.className = 'field__value';
-
-    const inputEl = document.createElement('input');
-    inputEl.type = 'range';
-    inputEl.className = 'field__input';
-    inputEl.min = String(f.min);
-    inputEl.max = String(f.max);
-    inputEl.step = String(f.step);
-    inputEl.addEventListener('input', () => {
-      const v = Number(inputEl.value);
-      store.update({ [section]: { [f.key]: v } });
-    });
-
-    wrapper.appendChild(labelEl);
-    wrapper.appendChild(valueEl);
-    wrapper.appendChild(inputEl);
-    container.appendChild(wrapper);
+    if (f.kind === 'toggle') {
+      container.appendChild(renderToggle(section, f));
+    } else {
+      container.appendChild(renderRange(section, f));
+    }
   }
+}
+
+function renderRange(section, f) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'field';
+  wrapper.dataset.section = section;
+  wrapper.dataset.key = f.key;
+  if (f.disabledBy) wrapper.dataset.disabledBy = f.disabledBy;
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'field__label';
+  labelEl.setAttribute('data-i18n', `field.${f.key}`);
+  labelEl.textContent = t(`field.${f.key}`);
+
+  const valueEl = document.createElement('span');
+  valueEl.className = 'field__value';
+
+  const inputEl = document.createElement('input');
+  inputEl.type = 'range';
+  inputEl.className = 'field__input';
+  inputEl.min = String(f.min);
+  inputEl.max = String(f.max);
+  inputEl.step = String(f.step);
+  inputEl.addEventListener('input', () => {
+    const v = Number(inputEl.value);
+    store.update({ [section]: { [f.key]: v } });
+  });
+
+  wrapper.appendChild(labelEl);
+  wrapper.appendChild(valueEl);
+  wrapper.appendChild(inputEl);
+  return wrapper;
+}
+
+function renderToggle(section, f) {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'field field--toggle';
+  wrapper.dataset.section = section;
+  wrapper.dataset.key = f.key;
+
+  const inputEl = document.createElement('input');
+  inputEl.type = 'checkbox';
+  inputEl.className = 'field__check';
+  inputEl.addEventListener('change', () => {
+    store.update({ [section]: { [f.key]: inputEl.checked } });
+  });
+
+  const labelEl = document.createElement('span');
+  labelEl.className = 'field__label';
+  labelEl.setAttribute('data-i18n', `field.${f.key}`);
+  labelEl.textContent = t(`field.${f.key}`);
+
+  wrapper.appendChild(inputEl);
+  wrapper.appendChild(labelEl);
+  return wrapper;
 }
 
 function renderPresets(container) {
@@ -140,8 +173,18 @@ function syncFields(container, values) {
     const v = values[key];
     const input = field.querySelector('input');
     const valueEl = field.querySelector('.field__value');
-    if (input && v !== undefined) input.value = String(v);
-    if (valueEl && v !== undefined) valueEl.textContent = formatValue(v);
+    if (input) {
+      if (input.type === 'checkbox') input.checked = !!v;
+      else if (v !== undefined) input.value = String(v);
+    }
+    if (valueEl && typeof v === 'number') valueEl.textContent = formatValue(v);
+
+    const disabledByKey = field.dataset.disabledBy;
+    if (disabledByKey) {
+      const isDisabled = !!values[disabledByKey];
+      field.classList.toggle('is-disabled', isDisabled);
+      if (input) input.disabled = isDisabled;
+    }
   });
 }
 

@@ -1,7 +1,9 @@
-/* ui/preview.js — 原画 Canvas と SVG 結果の表示・ズームパン・Before/After 比較。 */
+/* ui/preview.js — 原画 Canvas と SVG 結果の表示・ズームパン・Before/After 比較。
+ * 前処理（明るさ・コントラスト・ガンマ・ぼかし・2 値化）はこの層でリアルタイム反映する。 */
 
 import { store } from '../store.js';
 import { attachViewport } from './viewport.js';
+import { preprocessForPreview, otsuThreshold } from '../engine/preprocess.js';
 
 let sourceVp = null;
 let resultVp = null;
@@ -22,13 +24,34 @@ export function initPreview(opts) {
 
   let lastSourceRef = null;
   let lastSvgRef = null;
+  let lastMode = null;
+  let lastPreprocess = null;
+  let scheduled = false;
 
   store.subscribe((state) => {
-    if (state.source !== lastSourceRef) {
+    const sourceChanged = state.source !== lastSourceRef;
+    const modeChanged = state.mode !== lastMode;
+    const preprocessChanged = state.preprocess !== lastPreprocess;
+
+    if (sourceChanged) {
       lastSourceRef = state.source;
-      renderSource(state.source, opts);
       sourceVp.refit();
     }
+    if (modeChanged) lastMode = state.mode;
+    if (preprocessChanged) lastPreprocess = state.preprocess;
+
+    if (sourceChanged || modeChanged || preprocessChanged) {
+      // debounce — preprocess は重いのでフレームに 1 回まで
+      if (!scheduled) {
+        scheduled = true;
+        requestAnimationFrame(() => {
+          scheduled = false;
+          renderSource(store.state, opts);
+          if (compareActive) refreshCompare(opts);
+        });
+      }
+    }
+
     if (state.svg !== lastSvgRef) {
       lastSvgRef = state.svg;
       renderResult(state.svg, state.svgMeta, opts);
@@ -42,7 +65,8 @@ export function getViewports() {
   return { source: sourceVp, result: resultVp };
 }
 
-function renderSource(source, { canvasEl, dropzoneEl, sourceMetaEl }) {
+function renderSource(state, { canvasEl, dropzoneEl, sourceMetaEl }) {
+  const { source, mode, preprocess } = state;
   if (!source) {
     canvasEl.hidden = true;
     dropzoneEl.hidden = false;
@@ -55,12 +79,37 @@ function renderSource(source, { canvasEl, dropzoneEl, sourceMetaEl }) {
   canvasEl.height = source.height;
   canvasEl.style.width = `${source.width}px`;
   canvasEl.style.height = `${source.height}px`;
-  const ctx = canvasEl.getContext('2d');
-  if (ctx) {
-    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-    ctx.drawImage(source.imageBitmap, 0, 0);
+  const ctx = canvasEl.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+  ctx.drawImage(source.imageBitmap, 0, 0);
+
+  const hasPreprocess =
+    preprocess.brightness !== 0 ||
+    preprocess.contrast !== 0 ||
+    Math.abs(preprocess.gamma - 1) > 1e-3 ||
+    preprocess.blur > 0 ||
+    mode === 'binary' ||
+    mode === 'silhouette' ||
+    mode === 'outline' ||
+    mode === 'centerline' ||
+    mode === 'edges';
+
+  if (hasPreprocess) {
+    const imageData = ctx.getImageData(0, 0, source.width, source.height);
+    preprocessForPreview(imageData, { mode, preprocess });
+    ctx.putImageData(imageData, 0, 0);
   }
-  sourceMetaEl.textContent = `${source.width}×${source.height}`;
+
+  let metaText = `${source.width}×${source.height}`;
+  if (preprocess.autoThreshold && (mode === 'binary' || mode === 'silhouette' || mode === 'outline' || mode === 'centerline')) {
+    // しきい値表示用に再計算（preprocessForPreview 後の grayscale 値で）
+    const id = ctx.getImageData(0, 0, source.width, source.height);
+    const t = otsuThreshold(id);
+    metaText += ` · t=${t}`;
+  }
+  sourceMetaEl.textContent = metaText;
 }
 
 function renderResult(svg, meta, { svgHostEl, placeholderEl, resultMetaEl, compareBtnEl }) {

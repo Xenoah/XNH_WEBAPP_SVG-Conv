@@ -96,13 +96,12 @@ async function convert() {
     svgMeta: null,
   });
 
-  const offscreen = new OffscreenCanvas(source.width, source.height);
-  const ctx = offscreen.getContext('2d');
+  // ソース canvas には preview 側で前処理済みの画像が入っている。
+  const ctx = els.sourceCanvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) {
     store.update({ ui: { busy: false, statusKey: 'status.error' } });
     return;
   }
-  ctx.drawImage(source.imageBitmap, 0, 0);
   const imageData = ctx.getImageData(0, 0, source.width, source.height);
 
   const id = ++activeJobId;
