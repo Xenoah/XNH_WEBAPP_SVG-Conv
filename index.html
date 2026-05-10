@@ -51,6 +51,16 @@
           <span data-i18n="toolbar.live">ライブ</span>
         </label>
         <span class="export-group">
+          <select class="select" id="size-template-select" aria-label="出力サイズ" title="出力サイズテンプレート">
+            <option value="native">元サイズ</option>
+            <option value="square-512">正方 512</option>
+            <option value="square-1024">正方 1024</option>
+            <option value="icon-128">アイコン 128</option>
+            <option value="instagram-1080">Instagram 1080</option>
+            <option value="twitter-1500x500">X ヘッダ</option>
+            <option value="youtube-1280x720">YouTube</option>
+            <option value="a4">A4 縦</option>
+          </select>
           <select class="select" id="format-select" aria-label="出力形式">
             <option value="svg">SVG</option>
             <option value="svgz">SVGZ</option>
@@ -143,6 +153,13 @@
             <span data-i18n="preview.source">原画</span>
             <span class="preview__meta" id="source-meta"></span>
             <span class="preview__actions">
+              <span class="brush-tools" id="brush-tools" role="toolbar" aria-label="ブラシ">
+                <button type="button" class="btn btn--icon btn--ghost" data-brush-tool="none" title="ブラシ無効" aria-pressed="true">↖</button>
+                <button type="button" class="btn btn--icon btn--ghost" data-brush-tool="paint" title="加筆（黒）">✎</button>
+                <button type="button" class="btn btn--icon btn--ghost" data-brush-tool="erase" title="消しゴム（白）">⌫</button>
+                <button type="button" class="btn btn--icon btn--ghost" data-action="brush-clear" title="ブラシをクリア">⟲</button>
+                <input type="range" id="brush-size" min="2" max="80" step="1" class="brush-size" title="ブラシ太さ" />
+              </span>
               <button type="button" class="btn btn--icon btn--ghost" data-viewport="source" data-action="fit" title="フィット (0)">⤢</button>
               <button type="button" class="btn btn--icon btn--ghost" data-viewport="source" data-action="zoom-in" title="拡大 (+)">＋</button>
               <button type="button" class="btn btn--icon btn--ghost" data-viewport="source" data-action="zoom-out" title="縮小 (-)">−</button>

@@ -134,6 +134,28 @@ body {
   margin-left: auto;
 }
 
+.brush-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+  margin-right: 2px;
+}
+
+.brush-tools .brush-size {
+  width: 70px;
+  accent-color: var(--accent);
+}
+
+.preview__viewport[data-brush-tool='paint'] {
+  cursor: crosshair;
+}
+
+.preview__viewport[data-brush-tool='erase'] {
+  cursor: cell;
+}
+
 .app-footer {
   display: flex;
   align-items: center;

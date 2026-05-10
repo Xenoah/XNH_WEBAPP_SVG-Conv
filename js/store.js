@@ -6,6 +6,7 @@ const STORAGE_KEY = 'xnh-svg-conv:state';
 const DEFAULT_STATE = Object.freeze({
   // ファイル
   source: null, // { name, type, width, height, imageBitmap }
+  brushDirty: 0, // ブラシキャンバスに描き込みがあるたびインクリメント（リアクティブ更新用）
   // 出力
   svg: null, // string
   svgMeta: null, // { bytes, nodes }
@@ -20,6 +21,10 @@ const DEFAULT_STATE = Object.freeze({
     blur: 0, // 0..5 px
     threshold: 128, // 0..255 (binary mode)
     autoThreshold: true,
+    saturation: 0, // -100..100  彩度
+    hueRotate: 0, // -180..180  色相回転
+    invert: false,
+    sepia: false,
   },
   // トレースパラメータ
   trace: {
@@ -40,7 +45,13 @@ const DEFAULT_STATE = Object.freeze({
     statusKey: 'status.idle',
     liveTrace: false, // パラメータ変更時に自動で再トレースするか
     exportFormat: 'svg', // 'svg' | 'svgz' | 'png' | 'jpeg' | 'webp' | 'pdf'
+    sizeTemplate: 'native', // 'native' | 'square-512' | 'square-1024' | 'icon-128' | 'instagram-1080' | 'twitter-1500x500' | 'youtube-1280x720' | 'a4'
+    brushTool: 'none', // 'none' | 'paint' (黒塗り) | 'erase' (白塗り)
+    brushSize: 16, // px (元画像基準)
+    brushHardness: 0.85, // 0..1
   },
+  // パレット差し替え（color モードのみ反映）
+  paletteOverride: null, // { '#原色': '#新色', ... }
 });
 
 class Store extends EventTarget {

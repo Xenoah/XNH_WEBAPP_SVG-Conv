@@ -22,6 +22,96 @@ export function applyToneCurve(imageData, { brightness = 0, contrast = 0, gamma 
   return imageData;
 }
 
+/** 彩度（-100..100）と色相回転（度数, -180..180）。HSL 経由。 */
+export function applyHsl(imageData, { saturation = 0, hueRotate = 0 } = {}) {
+  if (!saturation && !hueRotate) return imageData;
+  const data = imageData.data;
+  const sScale = 1 + saturation / 100;
+  const hRot = hueRotate / 360;
+  for (let i = 0; i < data.length; i += 4) {
+    const [h, s, l] = rgbToHsl(data[i], data[i + 1], data[i + 2]);
+    const ns = clamp01(s * sScale);
+    const nh = (h + hRot + 1) % 1;
+    const [r, g, b] = hslToRgb(nh, ns, l);
+    data[i] = r;
+    data[i + 1] = g;
+    data[i + 2] = b;
+  }
+  return imageData;
+}
+
+/** 色相反転 */
+export function invertColors(imageData) {
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i];
+    data[i + 1] = 255 - data[i + 1];
+    data[i + 2] = 255 - data[i + 2];
+  }
+  return imageData;
+}
+
+/** セピアトーン（写真調変換） */
+export function sepia(imageData) {
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const tr = 0.393 * r + 0.769 * g + 0.189 * b;
+    const tg = 0.349 * r + 0.686 * g + 0.168 * b;
+    const tb = 0.272 * r + 0.534 * g + 0.131 * b;
+    data[i] = tr > 255 ? 255 : tr | 0;
+    data[i + 1] = tg > 255 ? 255 : tg | 0;
+    data[i + 2] = tb > 255 ? 255 : tb | 0;
+  }
+  return imageData;
+}
+
+function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0, s, l = (max + min) / 2;
+  if (max === min) {
+    h = 0;
+    s = 0;
+  } else {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  return [h, s, l];
+}
+
+function hslToRgb(h, s, l) {
+  if (s === 0) {
+    const v = (l * 255) | 0;
+    return [v, v, v];
+  }
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  return [
+    (hueToRgb(p, q, h + 1 / 3) * 255) | 0,
+    (hueToRgb(p, q, h) * 255) | 0,
+    (hueToRgb(p, q, h - 1 / 3) * 255) | 0,
+  ];
+}
+
+function hueToRgb(p, q, t) {
+  if (t < 0) t += 1;
+  if (t > 1) t -= 1;
+  if (t < 1 / 6) return p + (q - p) * 6 * t;
+  if (t < 1 / 2) return q;
+  if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+  return p;
+}
+
 function buildToneLUT(brightness, contrast, gamma) {
   // contrast: factor = (259*(c+255)) / (255*(259-c)) where c is -255..255
   const c = (contrast / 100) * 255;
@@ -182,6 +272,11 @@ export function binarize(imageData, threshold = 128) {
  *  mode は最終的なトレースモード。preview 用に「2 値化したかった結果」もここで反映する。 */
 export function preprocessForPreview(imageData, { mode, preprocess }) {
   applyToneCurve(imageData, preprocess);
+  if (preprocess.saturation || preprocess.hueRotate) {
+    applyHsl(imageData, preprocess);
+  }
+  if (preprocess.invert) invertColors(imageData);
+  if (preprocess.sepia) sepia(imageData);
   if (preprocess.blur > 0) blur(imageData, preprocess.blur);
 
   if (mode === 'binary' || mode === 'silhouette' || mode === 'outline' || mode === 'centerline') {

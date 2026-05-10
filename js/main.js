@@ -7,6 +7,7 @@ import { initPreview, getViewports } from './ui/preview.js';
 import { initSplitter } from './ui/splitter.js';
 import { initControls } from './ui/controls.js';
 import { initToolbar, applyTheme } from './ui/toolbar.js';
+import { attachBrush, resetBrush } from './ui/brush.js';
 import { describe, optimize, copyToClipboard } from './engine/optimizeSvg.js';
 import { exportSvgAs } from './engine/export.js';
 
@@ -15,6 +16,7 @@ const els = {
   fileInput: document.getElementById('file-input'),
   localeSelect: document.getElementById('locale-select'),
   formatSelect: document.getElementById('format-select'),
+  sizeTemplateSelect: document.getElementById('size-template-select'),
   liveTraceToggle: document.getElementById('live-trace-toggle'),
 
   preview: document.getElementById('preview'),
@@ -76,9 +78,19 @@ function onWorkerMessage(event) {
       store.update({ ui: { progress: msg.value } });
       break;
     case 'done': {
-      const optimized = optimize(msg.svg, { precision: 2 });
-      const meta = describe(optimized);
+      let optimized = optimize(msg.svg, { precision: 2 });
       const palette = extractPalette(optimized);
+      // 既存のパレット override を反映
+      const override = store.state.paletteOverride;
+      if (override) {
+        for (const [from, to] of Object.entries(override)) {
+          if (palette.includes(from)) {
+            const re = new RegExp(`fill="${escapeRegex(from)}"`, 'gi');
+            optimized = optimized.replace(re, `fill="${to}"`);
+          }
+        }
+      }
+      const meta = describe(optimized);
       store.update({
         svg: optimized,
         svgMeta: meta,
@@ -146,6 +158,7 @@ async function downloadCurrent() {
       width: source.width,
       height: source.height,
       baseName,
+      sizeTemplate: ui.sizeTemplate || 'native',
     });
     if (!result) {
       console.warn('[main] export failed; falling back to .svg');
@@ -186,6 +199,10 @@ function saveBlob(blob, filename) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function extractPalette(svg) {
@@ -231,14 +248,60 @@ function bindStatus() {
 }
 
 function bindFormatSelector() {
-  if (!els.formatSelect) return;
-  els.formatSelect.value = store.state.ui.exportFormat || 'svg';
-  els.formatSelect.addEventListener('change', () => {
-    store.update({ ui: { exportFormat: els.formatSelect.value } });
-  });
+  if (els.formatSelect) {
+    els.formatSelect.value = store.state.ui.exportFormat || 'svg';
+    els.formatSelect.addEventListener('change', () => {
+      store.update({ ui: { exportFormat: els.formatSelect.value } });
+    });
+  }
+  if (els.sizeTemplateSelect) {
+    els.sizeTemplateSelect.value = store.state.ui.sizeTemplate || 'native';
+    els.sizeTemplateSelect.addEventListener('change', () => {
+      store.update({ ui: { sizeTemplate: els.sizeTemplateSelect.value } });
+    });
+  }
   store.subscribe((state) => {
     const fmt = state.ui.exportFormat || 'svg';
-    if (els.formatSelect.value !== fmt) els.formatSelect.value = fmt;
+    if (els.formatSelect && els.formatSelect.value !== fmt) els.formatSelect.value = fmt;
+    const tpl = state.ui.sizeTemplate || 'native';
+    if (els.sizeTemplateSelect && els.sizeTemplateSelect.value !== tpl) els.sizeTemplateSelect.value = tpl;
+  });
+}
+
+function bindBrushTools() {
+  const tools = document.getElementById('brush-tools');
+  const sizeInput = document.getElementById('brush-size');
+  if (!tools) return;
+
+  tools.addEventListener('click', (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement)) return;
+    const tool = target.closest('[data-brush-tool]')?.getAttribute('data-brush-tool');
+    if (tool) {
+      store.update({ ui: { brushTool: tool } });
+      return;
+    }
+    const action = target.closest('[data-action]')?.getAttribute('data-action');
+    if (action === 'brush-clear') {
+      resetBrush();
+    }
+  });
+
+  if (sizeInput) {
+    sizeInput.value = String(store.state.ui.brushSize ?? 16);
+    sizeInput.addEventListener('input', () => {
+      store.update({ ui: { brushSize: Number(sizeInput.value) } });
+    });
+  }
+
+  store.subscribe((state) => {
+    const cur = state.ui.brushTool || 'none';
+    tools.querySelectorAll('[data-brush-tool]').forEach((b) => {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-brush-tool') === cur));
+    });
+    if (sizeInput && Number(sizeInput.value) !== state.ui.brushSize) {
+      sizeInput.value = String(state.ui.brushSize);
+    }
   });
 }
 
@@ -318,7 +381,23 @@ async function bootstrap() {
   bindStatus();
   bindFormatSelector();
   bindLiveTraceToggle();
+  bindBrushTools();
   bindShortcuts();
+
+  // 画像差し替え時はブラシをリセット
+  let lastSrcRef = store.state.source;
+  store.subscribe((state) => {
+    if (state.source !== lastSrcRef) {
+      lastSrcRef = state.source;
+      resetBrush();
+    }
+  });
+
+  attachBrush({
+    host: els.sourceHost,
+    sourceCanvas: els.sourceCanvas,
+    getViewport: () => getViewports().source?.getState() ?? null,
+  });
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker

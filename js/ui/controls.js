@@ -9,7 +9,11 @@ const PREPROCESS_FIELDS = [
   { key: 'brightness', kind: 'range', min: -100, max: 100, step: 1 },
   { key: 'contrast', kind: 'range', min: -100, max: 100, step: 1 },
   { key: 'gamma', kind: 'range', min: 0.2, max: 3.0, step: 0.05 },
+  { key: 'saturation', kind: 'range', min: -100, max: 100, step: 1 },
+  { key: 'hueRotate', kind: 'range', min: -180, max: 180, step: 1 },
   { key: 'blur', kind: 'range', min: 0, max: 5, step: 0.1 },
+  { key: 'invert', kind: 'toggle' },
+  { key: 'sepia', kind: 'toggle' },
   { key: 'autoThreshold', kind: 'toggle' },
   { key: 'threshold', kind: 'range', min: 0, max: 255, step: 1, disabledBy: 'autoThreshold' },
 ];
@@ -89,25 +93,94 @@ export function initControls(opts) {
 
 function refreshPalette({ paletteGroup, paletteSection }) {
   if (!paletteGroup || !paletteSection) return;
-  const { palette, mode } = store.state;
+  const { palette, mode, paletteOverride } = store.state;
   if (!palette || !palette.length || mode !== 'color') {
     paletteSection.hidden = true;
     return;
   }
   paletteSection.hidden = false;
   paletteGroup.innerHTML = '';
-  for (const hex of palette) {
-    const sw = document.createElement('span');
+  for (const orig of palette) {
+    const current = paletteOverride?.[orig] ?? orig;
+    const sw = document.createElement('label');
     sw.className = 'palette__swatch';
-    sw.style.background = hex;
-    sw.title = hex;
-    sw.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard?.writeText(hex);
-      } catch {}
+    sw.style.background = current;
+    sw.title = `${orig}${orig !== current ? ' → ' + current : ''}（クリック: 色変更 / Shift+クリック: HEX コピー）`;
+
+    const picker = document.createElement('input');
+    picker.type = 'color';
+    picker.value = normalizeHex(current);
+    picker.className = 'palette__picker';
+    picker.addEventListener('input', () => {
+      applyPaletteOverride(orig, picker.value);
     });
+    picker.addEventListener('click', (e) => {
+      if (e.shiftKey) {
+        e.preventDefault();
+        navigator.clipboard?.writeText(current).catch(() => {});
+      }
+    });
+
+    if (orig !== current) {
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'palette__reset';
+      reset.textContent = '×';
+      reset.title = `元の色 (${orig}) に戻す`;
+      reset.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearPaletteOverride(orig);
+      });
+      sw.appendChild(reset);
+    }
+
+    sw.appendChild(picker);
     paletteGroup.appendChild(sw);
   }
+}
+
+function applyPaletteOverride(orig, next) {
+  const cur = store.state.paletteOverride ?? {};
+  const map = { ...cur, [orig]: next };
+  store.update({ paletteOverride: map });
+  applyOverrideToSvg();
+}
+
+function clearPaletteOverride(orig) {
+  const cur = { ...(store.state.paletteOverride ?? {}) };
+  delete cur[orig];
+  const next = Object.keys(cur).length ? cur : null;
+  store.update({ paletteOverride: next });
+  applyOverrideToSvg();
+}
+
+function applyOverrideToSvg() {
+  const { svg, paletteOverride } = store.state;
+  if (!svg) return;
+  let out = svg;
+  if (paletteOverride) {
+    for (const [from, to] of Object.entries(paletteOverride)) {
+      const re = new RegExp(`fill="${escapeRegex(from)}"`, 'gi');
+      out = out.replace(re, `fill="${to}"`);
+    }
+  }
+  if (out !== svg) {
+    store.update({ svg: out });
+  }
+}
+
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeHex(hex) {
+  if (typeof hex !== 'string') return '#000000';
+  if (/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+  if (/^#[0-9a-f]{3}$/i.test(hex)) {
+    return '#' + hex.slice(1).split('').map((c) => c + c).join('');
+  }
+  return '#000000';
 }
 
 function renderModes(container) {

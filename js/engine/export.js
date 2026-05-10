@@ -17,6 +17,22 @@ const FORMATS = {
   pdf:  { mime: 'application/pdf', ext: 'pdf' },
 };
 
+/** 出力サイズテンプレート — width/height (px), 'native' は元画像サイズに従う */
+export const SIZE_TEMPLATES = {
+  'native':            { width: null, height: null, label: '元サイズ' },
+  'square-512':        { width: 512,  height: 512,  label: '正方 512' },
+  'square-1024':       { width: 1024, height: 1024, label: '正方 1024' },
+  'icon-128':          { width: 128,  height: 128,  label: 'アイコン 128' },
+  'instagram-1080':    { width: 1080, height: 1080, label: 'Instagram 1:1' },
+  'twitter-1500x500':  { width: 1500, height: 500,  label: 'X ヘッダ 3:1' },
+  'youtube-1280x720':  { width: 1280, height: 720,  label: 'YouTube 16:9' },
+  'a4':                { width: 595,  height: 842,  label: 'A4 縦' },
+};
+
+export function listSizeTemplates() {
+  return Object.keys(SIZE_TEMPLATES);
+}
+
 export function listFormats() {
   return Object.keys(FORMATS);
 }
@@ -33,40 +49,81 @@ export function formatLabel(fmt) {
 }
 
 /** SVG 文字列とサイズから、指定フォーマットの Blob を生成する。
- *  rasterScale: ラスター系で 1.0=等倍（SVG の viewBox と同等の解像度）。
- */
-export async function exportSvgAs(svgString, { format, width, height, baseName, rasterScale = 1, jpegQuality = 0.92 }) {
+ *  rasterScale: ラスター系で 1.0=等倍。
+ *  sizeTemplate: 'native' | 'square-512' 等。指定時は SVG の width/height/viewBox も書き換える。 */
+export async function exportSvgAs(svgString, {
+  format, width, height, baseName, rasterScale = 1, jpegQuality = 0.92, sizeTemplate = 'native',
+}) {
   const fmt = FORMATS[format];
   if (!fmt) throw new Error(`unknown format: ${format}`);
   const filename = `${baseName || 'image'}.${fmt.ext}`;
 
+  // テンプレートに合わせて出力サイズを決める
+  const tpl = SIZE_TEMPLATES[sizeTemplate] ?? SIZE_TEMPLATES.native;
+  const targetW = tpl.width ?? width;
+  const targetH = tpl.height ?? height;
+
+  // SVG はテンプレートサイズで width/height/viewBox を書き換える
+  let svgOut = svgString;
+  if (tpl.width && tpl.height) {
+    svgOut = resizeSvg(svgString, targetW, targetH);
+  }
+
   if (format === 'svg') {
-    return { blob: new Blob([svgString], { type: fmt.mime }), filename, mime: fmt.mime };
+    return { blob: new Blob([svgOut], { type: fmt.mime }), filename, mime: fmt.mime };
   }
   if (format === 'svgz') {
-    const blob = await toSvgz(svgString);
+    const blob = await toSvgz(svgOut);
     if (!blob) return null;
     return { blob, filename, mime: fmt.mime };
   }
 
   // 以降はラスタライズが必要
-  const targetW = Math.max(1, Math.round(width * rasterScale));
-  const targetH = Math.max(1, Math.round(height * rasterScale));
-  const pngBlob = await rasterizeSvg(svgString, targetW, targetH, 'image/png', 1.0);
+  const sizedW = Math.max(1, Math.round(targetW * rasterScale));
+  const sizedH = Math.max(1, Math.round(targetH * rasterScale));
+  const pngBlob = await rasterizeSvg(svgOut, sizedW, sizedH, 'image/png', 1.0);
   if (!pngBlob) return null;
 
   if (format === 'png') return { blob: pngBlob, filename, mime: fmt.mime };
   if (format === 'jpeg' || format === 'webp') {
-    const blob = await rasterizeSvg(svgString, targetW, targetH, fmt.mime, jpegQuality);
+    const blob = await rasterizeSvg(svgOut, sizedW, sizedH, fmt.mime, jpegQuality);
     if (!blob) return null;
     return { blob, filename, mime: fmt.mime };
   }
   if (format === 'pdf') {
     const buf = await pngBlob.arrayBuffer();
-    const blob = await buildPdfFromPng(new Uint8Array(buf), targetW, targetH);
+    const blob = await buildPdfFromPng(new Uint8Array(buf), sizedW, sizedH);
     return { blob, filename, mime: fmt.mime };
   }
   return null;
+}
+
+/** SVG 文字列の width/height/viewBox を書き換えて新サイズで返す。
+ *  オリジナルの viewBox を維持して比率は preserveAspectRatio="xMidYMid meet" で吸収。 */
+function resizeSvg(svgString, w, h) {
+  // 既存 width/height/viewBox を抽出
+  const widthMatch = svgString.match(/<svg[^>]*\swidth="([^"]+)"/);
+  const heightMatch = svgString.match(/<svg[^>]*\sheight="([^"]+)"/);
+  const viewBoxMatch = svgString.match(/<svg[^>]*\sviewBox="([^"]+)"/);
+  const ow = widthMatch ? parseFloat(widthMatch[1]) : null;
+  const oh = heightMatch ? parseFloat(heightMatch[1]) : null;
+  const vb = viewBoxMatch ? viewBoxMatch[1] : (ow && oh ? `0 0 ${ow} ${oh}` : `0 0 ${w} ${h}`);
+
+  let out = svgString;
+  // width
+  if (widthMatch) out = out.replace(/(<svg[^>]*\swidth=")[^"]+(")/, `$1${w}$2`);
+  else out = out.replace(/<svg/, `<svg width="${w}"`);
+  // height
+  if (heightMatch) out = out.replace(/(<svg[^>]*\sheight=")[^"]+(")/, `$1${h}$2`);
+  else out = out.replace(/<svg/, `<svg height="${h}"`);
+  // viewBox
+  if (viewBoxMatch) out = out.replace(/(<svg[^>]*\sviewBox=")[^"]+(")/, `$1${vb}$2`);
+  else out = out.replace(/<svg/, `<svg viewBox="${vb}"`);
+  // preserveAspectRatio （未指定なら付与）
+  if (!/<svg[^>]*\spreserveAspectRatio=/.test(out)) {
+    out = out.replace(/<svg/, `<svg preserveAspectRatio="xMidYMid meet"`);
+  }
+  return out;
 }
 
 /** SVG 文字列を <img> 経由で OffscreenCanvas/Canvas に描画し、指定 MIME の Blob にする。 */

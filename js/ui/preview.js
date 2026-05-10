@@ -4,6 +4,7 @@
 import { store } from '../store.js';
 import { attachViewport } from './viewport.js';
 import { preprocessForPreview, otsuThreshold } from '../engine/preprocess.js';
+import { getBrushCanvas } from './brush.js';
 
 let sourceVp = null;
 let resultVp = null;
@@ -26,12 +27,14 @@ export function initPreview(opts) {
   let lastSvgRef = null;
   let lastMode = null;
   let lastPreprocess = null;
+  let lastBrushDirty = 0;
   let scheduled = false;
 
   store.subscribe((state) => {
     const sourceChanged = state.source !== lastSourceRef;
     const modeChanged = state.mode !== lastMode;
     const preprocessChanged = state.preprocess !== lastPreprocess;
+    const brushChanged = (state.brushDirty | 0) !== lastBrushDirty;
 
     if (sourceChanged) {
       lastSourceRef = state.source;
@@ -39,8 +42,9 @@ export function initPreview(opts) {
     }
     if (modeChanged) lastMode = state.mode;
     if (preprocessChanged) lastPreprocess = state.preprocess;
+    if (brushChanged) lastBrushDirty = state.brushDirty | 0;
 
-    if (sourceChanged || modeChanged || preprocessChanged) {
+    if (sourceChanged || modeChanged || preprocessChanged || brushChanged) {
       // debounce — preprocess は重いのでフレームに 1 回まで
       if (!scheduled) {
         scheduled = true;
@@ -84,6 +88,10 @@ function renderSource(state, { canvasEl, dropzoneEl, sourceMetaEl }) {
 
   ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
   ctx.drawImage(source.imageBitmap, 0, 0);
+
+  // ブラシキャンバスをソースに合成（前処理の前に適用）
+  const brush = getBrushCanvas();
+  if (brush) ctx.drawImage(brush, 0, 0);
 
   const hasPreprocess =
     preprocess.brightness !== 0 ||
