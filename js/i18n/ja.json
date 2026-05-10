@@ -3,9 +3,9 @@
   "toolbar.open": "画像を開く",
   "toolbar.paste": "貼付",
   "toolbar.convert": "変換",
-  "toolbar.download": "SVG",
-  "toolbar.downloadGz": "SVGZ",
+  "toolbar.download": "保存",
   "toolbar.copy": "コピー",
+  "toolbar.live": "ライブ",
   "toolbar.theme": "テーマ切替",
   "toolbar.help": "ヘルプ",
   "status.copied": "クリップボードにコピーしました",
@@ -51,5 +51,6 @@
   "field.speckle": "スペックル除去",
   "field.cornerThreshold": "コーナーしきい値",
   "field.colors": "減色数",
-  "field.strokeWidth": "線幅"
+  "field.strokeWidth": "線幅",
+  "field.thinning": "細線化（Zhang-Suen）"
 }

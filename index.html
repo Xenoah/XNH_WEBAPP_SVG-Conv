@@ -46,25 +46,29 @@
         >
           変換
         </button>
-        <button
-          type="button"
-          class="btn"
-          data-action="download"
-          data-i18n="toolbar.download"
-          disabled
-        >
-          SVG
-        </button>
-        <button
-          type="button"
-          class="btn"
-          data-action="download-svgz"
-          data-i18n="toolbar.downloadGz"
-          title="gzip 圧縮した SVGZ をダウンロード"
-          disabled
-        >
-          SVGZ
-        </button>
+        <label class="toggle" title="パラメータ変更時に自動で再トレース">
+          <input type="checkbox" id="live-trace-toggle" />
+          <span data-i18n="toolbar.live">ライブ</span>
+        </label>
+        <span class="export-group">
+          <select class="select" id="format-select" aria-label="出力形式">
+            <option value="svg">SVG</option>
+            <option value="svgz">SVGZ</option>
+            <option value="png">PNG</option>
+            <option value="jpeg">JPEG</option>
+            <option value="webp">WebP</option>
+            <option value="pdf">PDF</option>
+          </select>
+          <button
+            type="button"
+            class="btn"
+            data-action="download"
+            data-i18n="toolbar.download"
+            disabled
+          >
+            保存
+          </button>
+        </span>
         <button
           type="button"
           class="btn"

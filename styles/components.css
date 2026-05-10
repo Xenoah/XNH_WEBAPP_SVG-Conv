@@ -67,6 +67,58 @@
   cursor: pointer;
 }
 
+/* ヘッダーのライブトレース・トグル（チェックボックス + ラベル） */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+}
+
+.toggle input[type='checkbox'] {
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.toggle:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* 出力フォーマット選択 + 保存ボタン */
+.export-group {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-elev);
+  overflow: hidden;
+}
+
+.export-group .select {
+  height: 30px;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  border-right: 1px solid var(--border);
+  padding: 0 6px 0 10px;
+}
+
+.export-group .btn {
+  height: 30px;
+  border: none;
+  border-radius: 0;
+}
+
 .panel__section {
   display: flex;
   flex-direction: column;

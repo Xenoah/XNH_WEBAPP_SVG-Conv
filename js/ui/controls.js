@@ -21,6 +21,7 @@ const TRACE_FIELDS = [
   { key: 'cornerThreshold', kind: 'range', min: 0, max: 180, step: 1 },
   { key: 'colors', kind: 'range', min: 2, max: 32, step: 1 },
   { key: 'strokeWidth', kind: 'range', min: 0, max: 10, step: 0.1 },
+  { key: 'thinning', kind: 'toggle', onlyForModes: ['edges', 'centerline'] },
 ];
 
 const PRESETS = [
@@ -143,6 +144,7 @@ function renderRange(section, f) {
   wrapper.dataset.section = section;
   wrapper.dataset.key = f.key;
   if (f.disabledBy) wrapper.dataset.disabledBy = f.disabledBy;
+  if (f.onlyForModes) wrapper.dataset.onlyForModes = f.onlyForModes.join(',');
 
   const labelEl = document.createElement('span');
   labelEl.className = 'field__label';
@@ -174,6 +176,7 @@ function renderToggle(section, f) {
   wrapper.className = 'field field--toggle';
   wrapper.dataset.section = section;
   wrapper.dataset.key = f.key;
+  if (f.onlyForModes) wrapper.dataset.onlyForModes = f.onlyForModes.join(',');
 
   const inputEl = document.createElement('input');
   inputEl.type = 'checkbox';
@@ -217,9 +220,19 @@ function refreshAll({ modeGroup, preprocessGroup, traceGroup }) {
 }
 
 function syncFields(container, values) {
+  const currentMode = store.state.mode;
   container.querySelectorAll('.field').forEach((field) => {
     const key = field.dataset.key;
     if (!key) return;
+
+    // mode 制限のチェック
+    const onlyForModes = field.dataset.onlyForModes;
+    if (onlyForModes && !onlyForModes.split(',').includes(currentMode)) {
+      field.hidden = true;
+      return;
+    }
+    field.hidden = false;
+
     const v = values[key];
     const input = field.querySelector('input');
     const valueEl = field.querySelector('.field__value');

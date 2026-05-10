@@ -24,7 +24,18 @@ https://xenoah.github.io/XNH_WEBAPP_SVG-Conv/
 - **依存ゼロのトレースエンジン**
   Potrace や ImageTracer の WASM/JS 移植を vendor として同梱せず、
   境界エッジ抽出 → Douglas-Peucker → Catmull-Rom 風ベジェ平滑化を
-  `js/engine/` 配下に自前実装しています。読む / 改造する / 学ぶことが容易です。
+  `js/engine/` 配下に自前実装しています。
+  線画モードでは Zhang-Suen で 1 ピクセル幅まで細線化したのち
+  連結折れ線をベクター化（センターライン抽出）します。
+
+- **ライブ再トレース**
+  ヘッダーの「ライブ」トグルを ON にすると、スライダ・モード・プリセット変更が
+  そのまま SVG プレビューに反映されます（350ms debounce）。
+  原画キャンバスの前処理プレビューは常時リアルタイムです。
+
+- **多彩な出力フォーマット**
+  SVG / SVGZ に加えて PNG / JPEG / WebP / PDF をブラウザだけで生成。
+  圧縮は `CompressionStream`、PDF は最小構成を自前構築しています。
 
 - **左右分割ライブプレビュー**
   原画とトレース結果を並べて表示し、Before/After スライダで重ね比較もできます。
@@ -65,9 +76,9 @@ python -m http.server 5173
    - `outline` … アウトライン抽出（黒の塗り）
    - `silhouette` … 影絵
    - `binary` … モノクロ 2 値
-   - `edges` … 線画（Sobel）
+   - `edges` … 線画（Sobel + 任意で Zhang-Suen 細線化）
+   - `centerline` … センターライン抽出（細線化 + 連結折れ線追跡）
    - `color` … カラー減色トレース
-   - `centerline` … センターライン（暫定）
 
 3. **パラメータを調整**
    - **前処理**: 明るさ / コントラスト / ガンマ / ぼかし / 2 値化しきい値（手動 or 大津法）
@@ -77,7 +88,8 @@ python -m http.server 5173
 
 4. **変換 → 保存**
    - 「変換」ボタン（または `Ctrl+Enter`）でトレース実行
-   - 「SVG」/「SVGZ」ボタンでダウンロード（SVGZ は `CompressionStream` で gzip 圧縮）
+   - ヘッダーの「ライブ」トグルを ON にすると、パラメータ変更がリアルタイムで再変換に反映
+   - 形式セレクタから出力形式を選択（**SVG / SVGZ / PNG / JPEG / WebP / PDF**）し、「保存」ボタンでダウンロード
    - 「コピー」で SVG コードをクリップボードへ
    - 結果ファイルサイズとノード数はヘッダ右側に表示されます。
 
@@ -110,11 +122,13 @@ python -m http.server 5173
 | 言語 | HTML5 / CSS3 / JavaScript（ES2022 + ES Modules） |
 | ビルド | **なし**（ブラウザがネイティブで読み込む） |
 | 画像処理 | `Canvas2D` / `OffscreenCanvas`（前処理は自前実装） |
-| トレース | 自前のラスター→ベクター変換（境界エッジ抽出 + Douglas-Peucker + Catmull-Rom 風ベジェ） |
+| トレース（塗り） | 境界エッジ抽出 + Douglas-Peucker + Catmull-Rom 風ベジェ |
+| トレース（線画） | Zhang-Suen 細線化 + 連結折れ線追跡 + ベジェ平滑化 |
 | エッジ検出 | Sobel フィルタ |
 | 減色 | Median Cut |
+| 出力形式 | SVG / SVGZ（gzip）/ PNG / JPEG / WebP / PDF（最小単一ページ・FlateDecode 埋込） |
 | SVG 最適化 | 小数点丸め・空白圧縮・コマンド前空白除去（自前ミニマル実装） |
-| 圧縮 | `CompressionStream`（gzip → SVGZ） |
+| 圧縮 | `CompressionStream`（deflate / gzip） |
 | PWA | Service Worker（手書き）+ Web App Manifest |
 | 状態管理 | `EventTarget` ベースの軽量ストア（永続化＋Undo/Redo 内蔵） |
 | 並列処理 | Web Worker（`type: 'module'`、Transferable で zero-copy） |
@@ -149,9 +163,11 @@ python -m http.server 5173
 │  │  ├─ preprocess.js        # 明るさ/コントラスト/ガンマ/ぼかし/大津法
 │  │  ├─ tracer.js            # 境界エッジ抽出 + 単純化 + 平滑化
 │  │  ├─ edges.js             # Sobel
+│  │  ├─ thinning.js          # Zhang-Suen 細線化 + 折れ線追跡
 │  │  ├─ quantize.js          # Median Cut
 │  │  ├─ trace.js             # モード別ディスパッチ
-│  │  └─ optimizeSvg.js       # 最適化 / コピー / SVGZ
+│  │  ├─ optimizeSvg.js       # 最適化 / コピー / SVGZ
+│  │  └─ export.js            # PNG / JPEG / WebP / PDF への書き出し
 │  ├─ workers/
 │  │  └─ trace.worker.js
 │  └─ i18n/
@@ -167,7 +183,7 @@ python -m http.server 5173
 
 - Chrome / Edge / Firefox / Safari 最新版での動作を想定しています。
 - 必須 API: `OffscreenCanvas`, `CompressionStream`, `<dialog>`, ES Modules, Web Worker (module type)。
-- `CompressionStream` 非対応のブラウザでは SVGZ ダウンロードが通常 SVG にフォールバックします。
+- `CompressionStream` 非対応のブラウザでは SVGZ / PDF 書き出しは無効化、SVG にフォールバックします。
 
 ---
 

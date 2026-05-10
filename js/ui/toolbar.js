@@ -6,12 +6,12 @@ import { loadFile } from './dropZone.js';
 /** @param {{ toolbarEl: HTMLElement, fileInputEl: HTMLInputElement,
  *           localeSelectEl: HTMLSelectElement,
  *           onConvert: () => void, onDownload: () => void,
- *           onDownloadSvgz: () => void, onCopy: () => void,
+ *           onCopy: () => void,
  *           onLocaleChange: (loc: string) => void }} opts */
 export function initToolbar(opts) {
   const {
     toolbarEl, fileInputEl, localeSelectEl,
-    onConvert, onDownload, onDownloadSvgz, onCopy, onLocaleChange,
+    onConvert, onDownload, onCopy, onLocaleChange,
   } = opts;
 
   toolbarEl.addEventListener('click', async (e) => {
@@ -32,9 +32,6 @@ export function initToolbar(opts) {
         break;
       case 'download':
         onDownload();
-        break;
-      case 'download-svgz':
-        onDownloadSvgz();
         break;
       case 'copy':
         onCopy();
@@ -58,7 +55,6 @@ export function initToolbar(opts) {
     const map = {
       'convert': !state.source || state.ui.busy,
       'download': !has,
-      'download-svgz': !has,
       'copy': !has,
     };
     for (const [action, disabled] of Object.entries(map)) {

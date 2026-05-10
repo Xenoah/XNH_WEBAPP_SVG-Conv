@@ -29,6 +29,7 @@ const DEFAULT_STATE = Object.freeze({
     cornerThreshold: 100, // 0..180 deg
     colors: 8, // 2..32 (color mode)
     strokeWidth: 0, // 0=fill mode
+    thinning: true, // edges/centerline モードで Zhang-Suen 細線化を行うか
   },
   // UI 状態
   ui: {
@@ -37,6 +38,8 @@ const DEFAULT_STATE = Object.freeze({
     busy: false,
     progress: 0,
     statusKey: 'status.idle',
+    liveTrace: false, // パラメータ変更時に自動で再トレースするか
+    exportFormat: 'svg', // 'svg' | 'svgz' | 'png' | 'jpeg' | 'webp' | 'pdf'
   },
 });
 

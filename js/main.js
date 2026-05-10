@@ -7,12 +7,15 @@ import { initPreview, getViewports } from './ui/preview.js';
 import { initSplitter } from './ui/splitter.js';
 import { initControls } from './ui/controls.js';
 import { initToolbar, applyTheme } from './ui/toolbar.js';
-import { describe, optimize, copyToClipboard, toSvgz } from './engine/optimizeSvg.js';
+import { describe, optimize, copyToClipboard } from './engine/optimizeSvg.js';
+import { exportSvgAs } from './engine/export.js';
 
 const els = {
   toolbar: document.getElementById('toolbar'),
   fileInput: document.getElementById('file-input'),
   localeSelect: document.getElementById('locale-select'),
+  formatSelect: document.getElementById('format-select'),
+  liveTraceToggle: document.getElementById('live-trace-toggle'),
 
   preview: document.getElementById('preview'),
   previewDivider: document.querySelector('.preview__divider'),
@@ -48,6 +51,7 @@ const els = {
 
 let traceWorker = null;
 let activeJobId = 0;
+let liveTimer = 0;
 
 function getWorker() {
   if (!traceWorker) {
@@ -121,24 +125,38 @@ async function convert() {
   );
 }
 
-function downloadSvg() {
-  const { svg, source } = store.state;
-  if (!svg) return;
-  const baseName = baseFileName(source);
-  saveBlob(new Blob([svg], { type: 'image/svg+xml' }), `${baseName}.svg`);
+/** ライブ再トレース：パラメータ変更後 350ms のアイドルで再変換。 */
+function scheduleLiveTrace() {
+  const { source, ui } = store.state;
+  if (!ui.liveTrace || !source) return;
+  if (liveTimer) clearTimeout(liveTimer);
+  liveTimer = setTimeout(() => {
+    liveTimer = 0;
+    if (store.state.ui.liveTrace) convert();
+  }, 350);
 }
 
-async function downloadSvgz() {
-  const { svg, source } = store.state;
-  if (!svg) return;
-  const blob = await toSvgz(svg);
-  if (!blob) {
-    console.warn('[main] CompressionStream not supported; falling back to .svg');
-    downloadSvg();
-    return;
-  }
+async function downloadCurrent() {
+  const { svg, source, ui } = store.state;
+  if (!svg || !source) return;
   const baseName = baseFileName(source);
-  saveBlob(blob, `${baseName}.svgz`);
+  try {
+    const result = await exportSvgAs(svg, {
+      format: ui.exportFormat || 'svg',
+      width: source.width,
+      height: source.height,
+      baseName,
+    });
+    if (!result) {
+      console.warn('[main] export failed; falling back to .svg');
+      saveBlob(new Blob([svg], { type: 'image/svg+xml' }), `${baseName}.svg`);
+      return;
+    }
+    saveBlob(result.blob, result.filename);
+  } catch (err) {
+    console.error('[main] export error', err);
+    store.update({ ui: { statusKey: 'status.error' } });
+  }
 }
 
 async function copySvg() {
@@ -212,6 +230,43 @@ function bindStatus() {
   });
 }
 
+function bindFormatSelector() {
+  if (!els.formatSelect) return;
+  els.formatSelect.value = store.state.ui.exportFormat || 'svg';
+  els.formatSelect.addEventListener('change', () => {
+    store.update({ ui: { exportFormat: els.formatSelect.value } });
+  });
+  store.subscribe((state) => {
+    const fmt = state.ui.exportFormat || 'svg';
+    if (els.formatSelect.value !== fmt) els.formatSelect.value = fmt;
+  });
+}
+
+function bindLiveTraceToggle() {
+  if (!els.liveTraceToggle) return;
+  els.liveTraceToggle.checked = !!store.state.ui.liveTrace;
+  els.liveTraceToggle.addEventListener('change', () => {
+    store.update({ ui: { liveTrace: els.liveTraceToggle.checked } });
+    if (els.liveTraceToggle.checked) scheduleLiveTrace();
+  });
+
+  // パラメータ・モード・画像の変化でライブ再トレースをスケジュール
+  let lastSig = '';
+  store.subscribe((state) => {
+    const sig = JSON.stringify({
+      mode: state.mode,
+      preprocess: state.preprocess,
+      trace: state.trace,
+      hasSource: !!state.source,
+      sourceRef: state.source ? state.source.name + state.source.width + state.source.height : '',
+    });
+    if (sig !== lastSig) {
+      lastSig = sig;
+      scheduleLiveTrace();
+    }
+  });
+}
+
 async function bootstrap() {
   applyTheme(store.state.ui.theme);
 
@@ -252,8 +307,7 @@ async function bootstrap() {
     fileInputEl: els.fileInput,
     localeSelectEl: els.localeSelect,
     onConvert: convert,
-    onDownload: downloadSvg,
-    onDownloadSvgz: downloadSvgz,
+    onDownload: downloadCurrent,
     onCopy: copySvg,
     onLocaleChange: async (loc) => {
       store.update({ ui: { locale: loc } });
@@ -262,7 +316,8 @@ async function bootstrap() {
     },
   });
   bindStatus();
-
+  bindFormatSelector();
+  bindLiveTraceToggle();
   bindShortcuts();
 
   if ('serviceWorker' in navigator) {
@@ -286,7 +341,7 @@ function bindShortcuts() {
       convert();
     } else if (key === 's') {
       e.preventDefault();
-      downloadSvg();
+      downloadCurrent();
     }
   });
 }

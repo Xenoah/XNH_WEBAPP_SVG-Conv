@@ -189,6 +189,44 @@ export function polygonToSmoothPath(pts, smoothing = 0.5, precision = 2) {
   return d;
 }
 
+/** 開いた折れ線（最初と最後の点が同じでない）を SVG path に変換。直線のみ。 */
+export function polylineToPath(pts, precision = 2) {
+  if (!pts.length) return '';
+  const r = (n) => Number(n.toFixed(precision));
+  let d = `M${r(pts[0][0])} ${r(pts[0][1])}`;
+  for (let i = 1; i < pts.length; i++) {
+    d += `L${r(pts[i][0])} ${r(pts[i][1])}`;
+  }
+  return d;
+}
+
+/** 折れ線（開閉どちらも対応）を Catmull-Rom 風スプラインで Cubic Bezier に。 */
+export function polylineToSmoothPath(pts, smoothing = 0.5, precision = 2) {
+  if (smoothing <= 0 || pts.length < 3) return polylineToPath(pts, precision);
+  const r = (n) => Number(n.toFixed(precision));
+  const closed =
+    pts.length > 2 &&
+    pts[0][0] === pts[pts.length - 1][0] &&
+    pts[0][1] === pts[pts.length - 1][1];
+  if (closed) return polygonToSmoothPath(pts, smoothing, precision);
+
+  const t = smoothing / 3;
+  const n = pts.length;
+  let d = `M${r(pts[0][0])} ${r(pts[0][1])}`;
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(n - 1, i + 2)];
+    const c1x = p1[0] + (p2[0] - p0[0]) * t;
+    const c1y = p1[1] + (p2[1] - p0[1]) * t;
+    const c2x = p2[0] - (p3[0] - p1[0]) * t;
+    const c2y = p2[1] - (p3[1] - p1[1]) * t;
+    d += `C${r(c1x)} ${r(c1y)} ${r(c2x)} ${r(c2y)} ${r(p2[0])} ${r(p2[1])}`;
+  }
+  return d;
+}
+
 /** マスクから一連のパスを生成し、SVG path string の配列を返す。 */
 export function tracePolygons(
   mask,

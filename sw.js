@@ -1,7 +1,7 @@
 /* Service Worker — オフライン用最小キャッシュ。
  * バージョンを bump すると古いキャッシュが破棄される。 */
 
-const VERSION = 'xnh-svg-conv-v0.2.0';
+const VERSION = 'xnh-svg-conv-v0.3.0';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -24,6 +24,8 @@ const CORE_ASSETS = [
   './js/engine/trace.js',
   './js/engine/quantize.js',
   './js/engine/edges.js',
+  './js/engine/thinning.js',
+  './js/engine/export.js',
   './js/workers/trace.worker.js',
   './js/i18n/index.js',
   './js/i18n/ja.json',

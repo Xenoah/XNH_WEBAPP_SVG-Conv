@@ -3,9 +3,9 @@
   "toolbar.open": "Open Image",
   "toolbar.paste": "Paste",
   "toolbar.convert": "Convert",
-  "toolbar.download": "SVG",
-  "toolbar.downloadGz": "SVGZ",
+  "toolbar.download": "Save",
   "toolbar.copy": "Copy",
+  "toolbar.live": "Live",
   "toolbar.theme": "Toggle theme",
   "toolbar.help": "Help",
   "status.copied": "Copied to clipboard",
@@ -51,5 +51,6 @@
   "field.speckle": "Despeckle",
   "field.cornerThreshold": "Corner threshold",
   "field.colors": "Color count",
-  "field.strokeWidth": "Stroke width"
+  "field.strokeWidth": "Stroke width",
+  "field.thinning": "Thinning (Zhang-Suen)"
 }
